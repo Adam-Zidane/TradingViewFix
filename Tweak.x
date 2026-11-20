@@ -1,7 +1,10 @@
 #import <UIKit/UIKit.h>
 
-static const CGFloat kMaxTop = 16.0;
-static const CGFloat kMaxBottom = 8.0;
+// ===== Pengaturan (ubah angka kalau perlu) =====
+static const CGFloat kMaxTop = 12.0;     // gap atas (header naik kalau makin kecil)
+static const CGFloat kMaxBottom = 0.0;   // gap bawah
+static const CGFloat kMenuScale = 0.85;  // ukuran menu bawah (1.0 = normal)
+// ===============================================
 
 static void TVLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1,2);
 static void TVLog(NSString *fmt, ...) {
@@ -13,7 +16,7 @@ static void TVLog(NSString *fmt, ...) {
     NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
     @synchronized(seen) {
-        if ([seen containsObject:line] || seen.count > 600) return;
+        if ([seen containsObject:line] || seen.count > 300) return;
         [seen addObject:line];
     }
     NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tvfix.log"];
@@ -34,21 +37,51 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
     return i;
 }
 
-static void TVWalk(UIView *v, int depth, CGFloat H) {
-    if (depth > 8) return;
-    CGRect f = [v convertRect:v.bounds toView:nil];
-    if (CGRectGetMaxY(f) > H * 0.78 && f.size.height < H * 0.3 && f.size.height > 1) {
-        TVLog(@"VIEW d%d %@ y=%.0f h=%.0f w=%.0f", depth, NSStringFromClass([v class]), f.origin.y, f.size.height, f.size.width);
+static __weak UIView *gPill;
+
+// Cari "pil" menu bawah: view terluar yang ukurannya seperti pil, di atas label "Watchlist"
+static UIView *TVFindPill(UIView *root, CGFloat W, int depth) {
+    if (depth > 30) return nil;
+    if ([root isKindOfClass:[UILabel class]] &&
+        [((UILabel *)root).text isEqualToString:@"Watchlist"]) {
+        UIView *best = nil;
+        UIView *v = root;
+        while (v && ![v isKindOfClass:[UIWindow class]]) {
+            CGSize sz = v.bounds.size;
+            if (sz.width >= W * 0.6 && sz.width <= W * 0.95 && sz.height >= 44 && sz.height <= 110) {
+                best = v;
+            } else if (sz.width > W * 0.95 || sz.height > 110) {
+                if (best) break;
+            }
+            v = v.superview;
+        }
+        return best;
     }
-    for (UIView *s in v.subviews) TVWalk(s, depth + 1, H);
+    for (UIView *s in root.subviews) {
+        UIView *r = TVFindPill(s, W, depth + 1);
+        if (r) return r;
+    }
+    return nil;
 }
 
-static void TVDump(void) {
+static void TVApplyMenu(void) {
+    if (kMenuScale >= 0.999) return;
+    UIWindow *win = nil;
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.hidden) continue;
-        TVLog(@"WINDOW %@ h=%.0f", NSStringFromClass([w class]), w.bounds.size.height);
-        TVWalk(w, 0, w.bounds.size.height);
+        if (!w.hidden && w.isKeyWindow) win = w;
     }
+    if (!win) return;
+    if (!gPill || gPill.window == nil) {
+        gPill = TVFindPill(win, win.bounds.size.width, 0);
+        if (gPill) TVLog(@"pill found %@ %.0fx%.0f", NSStringFromClass([gPill class]),
+                         gPill.bounds.size.width, gPill.bounds.size.height);
+    }
+    if (!gPill) return;
+    CGFloat s = kMenuScale;
+    CGFloat h = gPill.bounds.size.height;
+    CGAffineTransform t = CGAffineTransformMakeTranslation(0, h * (1.0 - s) / 2.0);
+    t = CGAffineTransformScale(t, s, s);
+    if (!CGAffineTransformEqualToTransform(gPill.transform, t)) gPill.transform = t;
 }
 
 %group TV
@@ -64,10 +97,7 @@ static void TVDump(void) {
 
 %hook UIWindow
 - (UIEdgeInsets)safeAreaInsets {
-    UIEdgeInsets o = %orig;
-    if (o.top > kMaxTop || o.bottom > kMaxBottom)
-        TVLog(@"UIWindow.safeAreaInsets top=%.1f bottom=%.1f", o.top, o.bottom);
-    return ClampInsets(o);
+    return ClampInsets(%orig);
 }
 %end
 
@@ -87,14 +117,6 @@ static void TVDump(void) {
 }
 %end
 
-%hook UIScrollView
-- (UIEdgeInsets)adjustedContentInset {
-    UIEdgeInsets o = %orig;
-    if (o.top > kMaxTop) TVLog(@"UIScrollView.adjustedContentInset %@ top=%.1f", NSStringFromClass([self class]), o.top);
-    return o;
-}
-%end
-
 %end
 
 %ctor {
@@ -109,7 +131,12 @@ static void TVDump(void) {
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
                                                       usingBlock:^(NSNotification *n) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ TVDump(); });
+            static NSTimer *timer;
+            if (!timer) {
+                timer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+                    TVApplyMenu();
+                }];
+            }
         }];
     }
 }
