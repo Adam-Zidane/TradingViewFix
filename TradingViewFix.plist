@@ -1,1 +1,1 @@
-{ Filter = { Bundles = ( "com.tradingview.TradingView" ); Executables = ( "TradingView" ); }; Mode = "Any"; }
+{ Filter = { Bundles = ( "com.apple.UIKit" ); }; }
