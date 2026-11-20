@@ -1,8 +1,8 @@
 Package: com.local.tradingviewfix
 Name: TradingViewFix
-Version: 1.0.3
+Version: 1.0.4
 Architecture: iphoneos-arm
-Description: Hapus gap atas dan bawah TradingView
+Description: TradingView full view tanpa gap
 Maintainer: Zidane Adam
 Author: Zidane Adam
 Section: Tweaks
