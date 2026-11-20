@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
-static const CGFloat kMaxTop = 20.0;
+static const CGFloat kMaxTop = 16.0;
+static const CGFloat kMaxBottom = 8.0;
 
 static void TVLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1,2);
 static void TVLog(NSString *fmt, ...) {
@@ -12,7 +13,7 @@ static void TVLog(NSString *fmt, ...) {
     NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
     @synchronized(seen) {
-        if ([seen containsObject:line] || seen.count > 300) return;
+        if ([seen containsObject:line] || seen.count > 600) return;
         [seen addObject:line];
     }
     NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tvfix.log"];
@@ -29,7 +30,25 @@ static void TVLog(NSString *fmt, ...) {
 
 static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
     if (i.top > kMaxTop) i.top = kMaxTop;
+    if (i.bottom > kMaxBottom) i.bottom = kMaxBottom;
     return i;
+}
+
+static void TVWalk(UIView *v, int depth, CGFloat H) {
+    if (depth > 8) return;
+    CGRect f = [v convertRect:v.bounds toView:nil];
+    if (CGRectGetMaxY(f) > H * 0.78 && f.size.height < H * 0.3 && f.size.height > 1) {
+        TVLog(@"VIEW d%d %@ y=%.0f h=%.0f w=%.0f", depth, NSStringFromClass([v class]), f.origin.y, f.size.height, f.size.width);
+    }
+    for (UIView *s in v.subviews) TVWalk(s, depth + 1, H);
+}
+
+static void TVDump(void) {
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.hidden) continue;
+        TVLog(@"WINDOW %@ h=%.0f", NSStringFromClass([w class]), w.bounds.size.height);
+        TVWalk(w, 0, w.bounds.size.height);
+    }
 }
 
 %group TV
@@ -37,7 +56,8 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
 %hook UIView
 - (UIEdgeInsets)safeAreaInsets {
     UIEdgeInsets o = %orig;
-    if (o.top > kMaxTop) TVLog(@"UIView.safeAreaInsets %@ top=%.1f", NSStringFromClass([self class]), o.top);
+    if (o.top > kMaxTop || o.bottom > kMaxBottom)
+        TVLog(@"UIView.safeAreaInsets %@ top=%.1f bottom=%.1f", NSStringFromClass([self class]), o.top, o.bottom);
     return ClampInsets(o);
 }
 %end
@@ -45,7 +65,8 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
 %hook UIWindow
 - (UIEdgeInsets)safeAreaInsets {
     UIEdgeInsets o = %orig;
-    if (o.top > kMaxTop) TVLog(@"UIWindow.safeAreaInsets top=%.1f", o.top);
+    if (o.top > kMaxTop || o.bottom > kMaxBottom)
+        TVLog(@"UIWindow.safeAreaInsets top=%.1f bottom=%.1f", o.top, o.bottom);
     return ClampInsets(o);
 }
 %end
@@ -53,10 +74,7 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
 %hook UIStatusBarManager
 - (CGRect)statusBarFrame {
     CGRect r = %orig;
-    if (r.size.height > kMaxTop) {
-        TVLog(@"UIStatusBarManager.statusBarFrame h=%.1f", r.size.height);
-        r.size.height = kMaxTop;
-    }
+    if (r.size.height > kMaxTop) r.size.height = kMaxTop;
     return r;
 }
 %end
@@ -64,10 +82,7 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
 %hook UIApplication
 - (CGRect)statusBarFrame {
     CGRect r = %orig;
-    if (r.size.height > kMaxTop) {
-        TVLog(@"UIApplication.statusBarFrame h=%.1f", r.size.height);
-        r.size.height = kMaxTop;
-    }
+    if (r.size.height > kMaxTop) r.size.height = kMaxTop;
     return r;
 }
 %end
@@ -90,5 +105,11 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
             [exe rangeOfString:@"tradingview" options:NSCaseInsensitiveSearch].location == NSNotFound) return;
         TVLog(@"loaded bid=%@ exe=%@ os=%@", bid, exe, [UIDevice currentDevice].systemVersion);
         %init(TV);
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *n) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ TVDump(); });
+        }];
     }
 }
