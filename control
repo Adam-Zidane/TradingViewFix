@@ -1,8 +1,8 @@
 Package: com.local.tradingviewfix
 Name: TradingViewFix
-Version: 1.0.1
+Version: 1.0.2
 Architecture: iphoneos-arm
-Description: Hapus gap atas TradingView (safe area atas 20pt)
+Description: Hapus gap atas dan bawah TradingView
 Maintainer: Zidane Adam
 Author: Zidane Adam
 Section: Tweaks
