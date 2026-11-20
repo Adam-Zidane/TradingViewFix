@@ -1,9 +1,9 @@
 Package: com.local.tradingviewfix
 Name: TradingViewFix
-Version: 1.0.0
+Version: 1.0.1
 Architecture: iphoneos-arm
 Description: Hapus gap atas TradingView (safe area atas 20pt)
-Maintainer: local
-Author: local
+Maintainer: Zidane Adam
+Author: Zidane Adam
 Section: Tweaks
 Depends: mobilesubstrate
