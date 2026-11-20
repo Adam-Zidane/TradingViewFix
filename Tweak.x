@@ -1,11 +1,12 @@
 #import <UIKit/UIKit.h>
 
 // ===== Pengaturan (ubah angka kalau perlu) =====
-static const CGFloat kMaxTop = 20.0;      // gap atas (20 = jam selalu terlihat)
-static const CGFloat kMaxBottom = 0.0;    // gap bawah
+static const CGFloat kMaxTop = 0.0;       // gap atas: 0 = full
+static const CGFloat kMaxBottom = 0.0;    // gap bawah: 0 = full
 static const CGFloat kMenuScale = 0.85;   // ukuran menu bawah (1.0 = normal)
 static const CGFloat kMenuDown = 4.0;     // turunkan menu (pt)
 static const BOOL kHideTabBlur = YES;     // hilangkan strip blur di belakang menu
+static const BOOL kHideStatusBar = YES;   // sembunyikan status bar di TradingView
 // ===============================================
 
 static void TVLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1,2);
@@ -66,6 +67,12 @@ static inline UIEdgeInsets ClampInsets(UIEdgeInsets i) {
     CGRect r = %orig;
     if (r.size.height > kMaxTop) r.size.height = kMaxTop;
     return r;
+}
+%end
+
+%hook UIViewController
+- (BOOL)prefersStatusBarHidden {
+    return kHideStatusBar ? YES : %orig;
 }
 %end
 
